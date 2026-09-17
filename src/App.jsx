@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
 
 import Dashboard from "./pages/Dashboard";
@@ -10,9 +11,22 @@ import LearningRoadmap from "./pages/LearningRoadmap";
 import MockInterview from "./pages/MockInterview";
 import InterviewHistory from "./pages/InterviewHistory";
 
+import { supabase } from "./lib/supabaseClient";
+
 import "./App.css";
 
 export default function App() {
+  /* =====================================================
+     AUTHENTICATION
+  ===================================================== */
+
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  /* =====================================================
+     NAVIGATION
+  ===================================================== */
+
   const [activePage, setActivePage] =
     useState("Dashboard");
 
@@ -20,12 +34,84 @@ export default function App() {
     useState(false);
 
   /* =====================================================
-     CLOSE MOBILE SIDEBAR WHEN PAGE CHANGES
+     CHECK SUPABASE SESSION
   ===================================================== */
 
   useEffect(() => {
-    setSidebarOpen(false);
-  }, [activePage]);
+    let mounted = true;
+
+    async function loadSession() {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error(
+            "Supabase session error:",
+            error
+          );
+
+          if (mounted) {
+            setUser(null);
+          }
+        } else {
+          if (mounted) {
+            setUser(session?.user ?? null);
+          }
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load authentication session:",
+          error
+        );
+
+        if (mounted) {
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    loadSession();
+
+    /* ===================================================
+       LISTEN FOR LOGIN / LOGOUT
+    =================================================== */
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log(
+          "Auth event:",
+          event
+        );
+
+        if (mounted) {
+          setUser(session?.user ?? null);
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  /* =====================================================
+     LOGIN HANDLER
+  ===================================================== */
+
+  function handleLogin(loggedInUser) {
+    setUser(loggedInUser);
+    setActivePage("Dashboard");
+  }
 
   /* =====================================================
      NAVIGATION
@@ -33,6 +119,83 @@ export default function App() {
 
   function handleNavigate(page) {
     setActivePage(page);
+  }
+
+  /* =====================================================
+     CLOSE MOBILE SIDEBAR
+  ===================================================== */
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [activePage]);
+
+  /* =====================================================
+     LOGOUT
+  ===================================================== */
+
+  async function handleLogout() {
+    try {
+      const { error } =
+        await supabase.auth.signOut();
+
+      if (error) {
+        console.error(
+          "Logout error:",
+          error
+        );
+        return;
+      }
+
+      setUser(null);
+      setActivePage("Dashboard");
+    } catch (error) {
+      console.error(
+        "Logout failed:",
+        error
+      );
+    }
+  }
+
+  /* =====================================================
+     AUTH LOADING SCREEN
+  ===================================================== */
+
+  if (authLoading) {
+    return (
+      <div className="auth-loading-screen">
+
+        <div className="auth-loading-card">
+
+          <div className="auth-loading-icon">
+            ✦
+          </div>
+
+          <h2>
+            AI Career Copilot
+          </h2>
+
+          <p>
+            Checking your session...
+          </p>
+
+          <div className="auth-loading-spinner" />
+
+        </div>
+
+      </div>
+    );
+  }
+
+  /* =====================================================
+     SHOW LOGIN IF USER IS NOT LOGGED IN
+  ===================================================== */
+
+  if (!user) {
+    return (
+      <Auth
+        onLogin={handleLogin}
+      />
+    );
   }
 
   /* =====================================================
@@ -169,9 +332,8 @@ export default function App() {
       >
         <Sidebar
           activePage={activePage}
-          setActivePage={
-            handleNavigate
-          }
+          setActivePage={handleNavigate}
+          onLogout={handleLogout}
         />
       </aside>
 
@@ -193,7 +355,7 @@ export default function App() {
             onClick={() =>
               setSidebarOpen(
                 (previous) =>
-                  !previous,
+                  !previous
               )
             }
             aria-label="Open navigation"

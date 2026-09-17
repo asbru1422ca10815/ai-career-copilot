@@ -12,7 +12,7 @@ import {
   BriefcaseBusiness,
 } from "lucide-react";
 
-import { supabase } from "../supabase";
+import { supabase } from "../lib/supabaseClient";
 
 function Auth({ onLogin }) {
   const [isSignUp, setIsSignUp] = useState(false);
